@@ -1,4 +1,3 @@
-from background import keep_alive
 import telebot
 from telebot import types
 from Strings import Strings
@@ -65,7 +64,4 @@ def callback_message(callback):
             print('Оплата прошла!')
             bot.send_message(callback.message.chat.id, strings.getEnding() + '\n\nЗабрать чек-лист: https://disk.yandex.ru/d/oTnvS1oxNtuxpQ\n\nЗабрать 🎁: https://disk.yandex.ru/d/aEj9GTEANTUhmQ')
 
-
-
-keep_alive()
 bot.polling(non_stop=True, interval=0)
