@@ -10,6 +10,7 @@ from aiogram.utils import executor
 import asyncio
 import csv
 import pandas as pd
+import yookassa
 
 # Инициализация бота и логирования
 API_TOKEN = '6976460514:AAG89jfnmFMr1Afv_iytwW8NwvCzCL1cOwU'
@@ -28,6 +29,8 @@ class Form(StatesGroup):
     phone = State()
     feedback = State()
     other_question = State()
+    remind = State()
+    blesk = State()
 
 def check_user_in_csv(user_id):
     with open(data, mode='r', newline='', encoding='utf-8') as file:
@@ -42,16 +45,32 @@ def update_data(user_id, title, value):
     df.loc[user_id, title] = value
     df.to_csv('data.csv')
 
+def delete_row(user_id):
+    # Загружаем данные в DataFrame, используя 'user_id' как индекс
+    df = pd.read_csv('data.csv', index_col='id')
+
+    # Проверяем наличие пользователя
+    if user_id in df.index:
+        # Удаляем строку по индексу
+        df = df.drop(index=user_id)
+
+        # Сохраняем изменения в файл
+        df.to_csv('data.csv')
+        print(f"Строка с user_id={user_id} успешно удалена.")
+    else:
+        print(f"Пользователь с user_id={user_id} не найден.")
+
 # Стартовое сообщение
 @dp.message_handler(commands='start')
 async def send_welcome(message: types.Message):
     user_id = message.from_user.id
     found = check_user_in_csv(user_id)
-    if found is None or found[1] == '':
-        with open(data, mode='a', newline='\n', encoding='utf-8') as file:
-            writer = csv.writer(file)
-            writer.writerow([user_id, None, None, None, "name", None, None, None, None])
-        await message.answer(
+    if found is not None:
+        delete_row(user_id)
+    with open(data, mode='a', newline='\n', encoding='utf-8') as file:
+        writer = csv.writer(file)
+        writer.writerow([user_id, None, None, None, None, None, None, None])
+    await message.answer(
             "🐾Мяу! Привет, я Бисквитик, твой добрый и ласковый помощник. Давай подружимся! Как тебя зовут? 😻")
     await Form.name.set()
 
@@ -60,10 +79,7 @@ async def send_welcome(message: types.Message):
 async def process_name(message: types.Message, state: FSMContext):
     await state.update_data(name=message.text)
     user_id = message.from_user.id
-    found = check_user_in_csv(user_id)
-    if found[1] == '':
-        update_data(user_id,'name',message.text)
-    update_data(user_id, 'state', 'email')
+    update_data(user_id, 'name', message.text)
     await message.answer(
             f"🐾Мурр, приятно познакомиться, {message.text}! Оставь, пожалуйста, свой адрес электронной почты, чтобы мы всегда могли быть на связи! 💌")
     await Form.email.set()
@@ -74,10 +90,7 @@ async def process_name(message: types.Message, state: FSMContext):
 async def process_email(message: types.Message, state: FSMContext):
     await state.update_data(email=message.text)
     user_id = message.from_user.id
-    found = check_user_in_csv(user_id)
-    if found[2] == '':
-        update_data(user_id, 'email', message.text)
-    update_data(user_id, 'state', 'phone')
+    update_data(user_id, 'email', message.text)
     share_phone_button = KeyboardButton(text="📱 Поделиться номером", request_contact=True)
     keyboard = ReplyKeyboardMarkup(resize_keyboard=True).add(share_phone_button)
     await message.answer("🐾Мяу, ещё мне нужен твой номер телефона, чтобы оставаться на связи! 📱", reply_markup=keyboard)
@@ -87,8 +100,6 @@ async def process_email(message: types.Message, state: FSMContext):
 # Сбор номера телефона
 @dp.message_handler(content_types=types.ContentType.CONTACT, state=Form.phone)
 async def process_phone(message: types.Message, state: FSMContext):
-    import yookassa
-
     def create_payment():
         yookassa.Configuration.account_id = 331223
         yookassa.Configuration.secret_key = 'live_f2-p06BIc-YtxL4AB8nBwaQ0nIN6joAL8NuslxbIAKU'
@@ -114,25 +125,25 @@ async def process_phone(message: types.Message, state: FSMContext):
         else:
             return False
 
-    user_id = message.from_user.id
-    found = check_user_in_csv(user_id)
-    if found[3] == '':
-        update_data(user_id, 'phone', message.contact.phone_number)
-    update_data(user_id, 'state', 'status')
     await state.update_data(phone=message.contact.phone_number)
+    user_id = message.from_user.id
+    update_data(user_id, 'phone', message.contact.phone_number)
     url, id = create_payment()
+    link_button = KeyboardButton(text="📱 Ссылка на оплату", url=url)
+    keyboard = ReplyKeyboardMarkup(resize_keyboard=True).add(link_button)
     await message.answer(
-        "🐾Ох, ты знаешь, у хозяйки есть замечательный продукт, который точно тебе понравится! 🌟 Практикум 'Чистый дом' 🌟 — это твой ключ к уюту и порядку. Вот ссылка для оплаты: " + url,
-        reply_markup=types.ReplyKeyboardRemove())
-    update_data(user_id, 'state', 'cause')
+        "🐾Ох, ты знаешь, у хозяйки есть замечательный продукт, который точно тебе понравится! 🌟 Практикум 'Чистый дом' 🌟 — это твой ключ к уюту и порядку.",
+        reply_markup=keyboard)
     count = 0
     while not check(id):
         count +=1
         time.sleep(1)
-        if count == 600: break
+        if count == 600 or check(id):
+            break
     if check(id):
         await bot.send_message(message.chat.id, "🐾 Мяу-мяу! Отлично, оплата прошла. Переходи к тетушке Блеск!")
         update_data(user_id, 'status', 'OK')
+        await Form.blesk.set()
     else:
         await bot.send_message(message.chat.id, "🐾 Мяу-мяу! Что-то не понравилось? Выбери причину:")
         update_data(user_id, 'status', 'Failed')
@@ -141,22 +152,30 @@ async def process_phone(message: types.Message, state: FSMContext):
         feedback_keyboard.add("💸 Цена высока", "⏳ Боюсь, что не хватит времени", "🤔 Не уверен, что поможет",
                               "💭 Другой вопрос")
         await message.answer("Выбери причину, и я мурлыкну в ответ! 😸", reply_markup=feedback_keyboard)
-    await Form.feedback.set()
+        await Form.feedback.set()
 
 
 
 # Обработка причин отказа
 @dp.message_handler(state=Form.feedback)
 async def process_feedback(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
     if message.text == "💸 Цена высока":
+        update_data(user_id, 'cause', 'price')
         await message.answer(
             "🐾Мур-мур, понимаю, 2000 рублей могут показаться значительной суммой, но это целый месяц доступа!")
+        await Form.remind.set()
     elif message.text == "⏳ Боюсь, что не хватит времени":
+        update_data(user_id, 'cause', 'time')
         await message.answer(
             "🐾Мур, боишься, что не успеешь? Практикум можно пройти за 3 дня, но доступ — целый месяц! 📅")
+        await Form.remind.set()
     elif message.text == "🤔 Не уверен, что поможет":
+        update_data(user_id, 'cause', 'help')
         await message.answer("🐾Мурр, ты будешь удивлён результатом! Расхламление и уборка сделают твой дом уютным! 🏡✨")
+        await Form.remind.set()
     elif message.text == "💭 Другой вопрос":
+        update_data(user_id, 'cause', 'other')
         await message.answer("🐾Мяу! Задай свой вопрос, и моя хозяйка Валерия скоро ответит!")
         await Form.other_question.set()
 
@@ -164,13 +183,17 @@ async def process_feedback(message: types.Message, state: FSMContext):
 # Обработка других вопросов
 @dp.message_handler(state=Form.other_question)
 async def process_other_question(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
+    update_data(user_id, 'question', message.text)
     await message.answer("🐾 Я передал твой вопрос хозяйке. Скоро она ответит!")
-    await state.finish()
+    await Form.remind.set()
 
 
 # Напоминание об оплате
-async def remind_payment(user_id):
-    await bot.send_message(user_id, "🐾 Мяу, это снова Бисквитик! Практикум 'Чистый дом' всё ещё ждёт тебя! 🏡💙")
+@dp.message_handler(state=Form.remind)
+async def remind_payment(message: types.Message, state: FSMContext):
+    await bot.send_message(user_id, "🐾 Мяу, это снова Бисквитик! Практикум 'Чистый дом' всё ещё ждёт тебя! 🏡💙\n Если передумаешь, жми на /start и заполняй анкету заново!")
+    await state.finish()
 
 
 if __name__ == '__main__':
