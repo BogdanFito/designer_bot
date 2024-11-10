@@ -5,7 +5,8 @@ from aiogram import Bot, Dispatcher, types
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters.state import State, StatesGroup
-from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardButton, InlineKeyboardMarkup, \
+    ReplyKeyboardRemove
 from aiogram.utils import executor
 import asyncio
 import csv
@@ -26,6 +27,9 @@ data = 'data.csv'
 class Form(StatesGroup):
     name = State()
     email = State()
+    choice = State()
+    current_task = State()
+    offer = State()
     phone = State()
     feedback = State()
     other_question = State()
@@ -69,7 +73,11 @@ async def send_welcome(message: types.Message):
         delete_row(user_id)
     with open(data, mode='a', newline='\n', encoding='utf-8') as file:
         writer = csv.writer(file)
+<<<<<<< HEAD
+        writer.writerow([user_id, None, None, None, None, None, None, None, None])
+=======
         writer.writerow([user_id, None, None, None, None, None, None, None])
+>>>>>>> c9dad5b12775cf3bfd93c72b3a9a80324418019a
     await message.answer(
             "🐾Мяу! Привет, я Бисквитик, твой добрый и ласковый помощник. Давай подружимся! Как тебя зовут? 😻")
     await Form.name.set()
@@ -94,11 +102,47 @@ async def process_email(message: types.Message, state: FSMContext):
     share_phone_button = KeyboardButton(text="📱 Поделиться номером", request_contact=True)
     keyboard = ReplyKeyboardMarkup(resize_keyboard=True).add(share_phone_button)
     await message.answer("🐾Мяу, ещё мне нужен твой номер телефона, чтобы оставаться на связи! 📱", reply_markup=keyboard)
-    await Form.phone.set()
+    await Form.choice.set()
+
+@dp.message_handler(content_types=types.ContentType.CONTACT, state=Form.choice)
+async def process_choice_contact(message: types.Message, state: FSMContext):
+    if message.contact:
+        await state.update_data(phone=message.contact.phone_number)
+        user_id = message.from_user.id
+        update_data(user_id, 'phone', message.contact.phone_number)
+        first_button = KeyboardButton(text="Практикум Чистый дом")
+        second_button = KeyboardButton(text="Полезные материалы")
+        third_button = KeyboardButton(text="Статьи")
+        keyboard = ReplyKeyboardMarkup(resize_keyboard=True).add(first_button, second_button, third_button)
+        await message.answer("🐾 Мяу-мяу, спасибо за номер, друг! Теперь мы точно не потеряемся! 😸 А чем тебе интереснее заняться прямо сейчас?", reply_markup=keyboard)
+        await Form.current_task.set()
+
+@dp.message_handler(state=Form.current_task)
+async def process_current_task(message: types.Message, state: FSMContext):
+    await state.update_data(current_task=message.text)
+
+    if message.text == "Практикум Чистый дом":
+
+        await state.update_data(offer=message.text)
+        user_id = message.from_user.id
+        update_data(user_id, 'interest', message.text)
+        first_button = KeyboardButton(text="Да")
+        second_button = KeyboardButton(text="Нет")
+        keyboard = ReplyKeyboardMarkup(resize_keyboard=True).add(first_button, second_button)
+        await message.answer(
+            "🐾 Мурр, а ты знал, что у хозяйки есть продукт,, который точно тебе пригодится? 🌟 Практикум 'Чистый дом' 🌟 — это решение для тех, кто устал от беспорядка и хочет вернуть уют и комфорт. Представь, как здорово — избавиться от ненужных вещей, навести чистоту и создать такую систему хранения, что всё всегда на своих местах! Дом станет твоим местом силы и покоя. Муррр, бери скорее, не упусти свой шанс на уют! Муррр, заинтересовало? 💙",
+            reply_markup=keyboard)
+
+        await Form.phone.set()
+    elif message.text == "Полезные материалы":
+        pass
+    else:
+        pass
+
 
 
 # Сбор номера телефона
-@dp.message_handler(content_types=types.ContentType.CONTACT, state=Form.phone)
+@dp.message_handler(state=Form.phone)
 async def process_phone(message: types.Message, state: FSMContext):
     def create_payment():
         yookassa.Configuration.account_id = 331223
@@ -125,6 +169,35 @@ async def process_phone(message: types.Message, state: FSMContext):
         else:
             return False
 
+<<<<<<< HEAD
+    user_id = message.from_user.id
+    url, id = create_payment()
+    link_button = InlineKeyboardButton(text="📱 Ссылка на оплату", url=url)
+    keyboard = InlineKeyboardMarkup().add(link_button)
+    if message.text == "Да":
+        await message.answer("🐾 Мурр, отлично, что тебя заинтересовало!",reply_markup=ReplyKeyboardRemove())
+        await message.answer("🐾 Стоимость — всего 2100 рублей, а доступ к практикуму 'Чистый дом' будет ровно на 30 дней. Ты сможешь пройти его даже за неделю, но валерия специально даёт целый месяц, чтобы ты мог подстроить программу под свой график. Уют и порядок ждут тебя, муррр, начинай прямо сейчас! 💙",
+        reply_markup=keyboard)
+        count = 0
+        while not check(id):
+            count +=1
+            time.sleep(1)
+            if count == 600 or check(id):
+                break
+        if check(id):
+            await bot.send_message(message.chat.id, "🐾 Мяу-мяу! Отлично, оплата прошла. Переходи к тетушке Блеск!")
+            update_data(user_id, 'status', 'OK')
+            await Form.blesk.set()
+        else:
+            await bot.send_message(message.chat.id, "🐾 Мяу-мяу! Что-то не понравилось? Выбери причину:")
+            update_data(user_id, 'status', 'Failed')
+            # Подсказки для ответов
+            feedback_keyboard = ReplyKeyboardMarkup(resize_keyboard=True)
+            feedback_keyboard.add("💸 Цена высока", "⏳ Боюсь, что не хватит времени", "🤔 Не уверен, что поможет",
+                                  "💭 Другой вопрос")
+            await message.answer("Выбери причину, и я мурлыкну в ответ! 😸", reply_markup=feedback_keyboard)
+            await Form.feedback.set()
+=======
     await state.update_data(phone=message.contact.phone_number)
     user_id = message.from_user.id
     update_data(user_id, 'phone', message.contact.phone_number)
@@ -144,6 +217,7 @@ async def process_phone(message: types.Message, state: FSMContext):
         await bot.send_message(message.chat.id, "🐾 Мяу-мяу! Отлично, оплата прошла. Переходи к тетушке Блеск!")
         update_data(user_id, 'status', 'OK')
         await Form.blesk.set()
+>>>>>>> c9dad5b12775cf3bfd93c72b3a9a80324418019a
     else:
         await bot.send_message(message.chat.id, "🐾 Мяу-мяу! Что-то не понравилось? Выбери причину:")
         update_data(user_id, 'status', 'Failed')
@@ -192,6 +266,10 @@ async def process_other_question(message: types.Message, state: FSMContext):
 # Напоминание об оплате
 @dp.message_handler(state=Form.remind)
 async def remind_payment(message: types.Message, state: FSMContext):
+<<<<<<< HEAD
+    user_id = message.from_user.id
+=======
+>>>>>>> c9dad5b12775cf3bfd93c72b3a9a80324418019a
     await bot.send_message(user_id, "🐾 Мяу, это снова Бисквитик! Практикум 'Чистый дом' всё ещё ждёт тебя! 🏡💙\n Если передумаешь, жми на /start и заполняй анкету заново!")
     await state.finish()
 
