@@ -8,7 +8,6 @@ from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardButton, InlineKeyboardMarkup, \
     ReplyKeyboardRemove
 from aiogram.utils import executor
-import asyncio
 import csv
 import pandas as pd
 import yookassa
@@ -20,7 +19,7 @@ logging.basicConfig(level=logging.INFO)
 bot = Bot(token=API_TOKEN)
 storage = MemoryStorage()
 dp = Dispatcher(bot, storage=storage)
-data = 'data.csv'
+data = '../data.csv'
 
 
 # Состояния
@@ -40,18 +39,19 @@ def check_user_in_csv(user_id):
     with open(data, mode='r', newline='', encoding='utf-8') as file:
         reader = csv.reader(file)
         for row in reader:
-            if str(row[0]) == str(user_id):
-                return row  # Возвращаем всю строку данных, если пользователь найден
+            if row:
+                if str(row[0]) == str(user_id):
+                    return row  # Возвращаем всю строку данных, если пользователь найден
     return None  # Если пользователя нет
 
 def update_data(user_id, title, value):
-    df = pd.read_csv('data.csv').set_index('id')
+    df = pd.read_csv(data).set_index('id')
     df.loc[user_id, title] = value
-    df.to_csv('data.csv')
+    df.to_csv(data)
 
 def delete_row(user_id):
     # Загружаем данные в DataFrame, используя 'user_id' как индекс
-    df = pd.read_csv('data.csv', index_col='id')
+    df = pd.read_csv(data, index_col='id')
 
     # Проверяем наличие пользователя
     if user_id in df.index:
@@ -59,7 +59,7 @@ def delete_row(user_id):
         df = df.drop(index=user_id)
 
         # Сохраняем изменения в файл
-        df.to_csv('data.csv')
+        df.to_csv(data)
         print(f"Строка с user_id={user_id} успешно удалена.")
     else:
         print(f"Пользователь с user_id={user_id} не найден.")
@@ -73,58 +73,49 @@ async def send_welcome(message: types.Message):
         delete_row(user_id)
     with open(data, mode='a', newline='\n', encoding='utf-8') as file:
         writer = csv.writer(file)
-<<<<<<< HEAD
+
         writer.writerow([user_id, None, None, None, None, None, None, None, None])
-=======
-        writer.writerow([user_id, None, None, None, None, None, None, None])
->>>>>>> c9dad5b12775cf3bfd93c72b3a9a80324418019a
     await message.answer(
-            "🐾Мяу! Привет, я Бисквитик, твой добрый и ласковый помощник. Давай подружимся! Как тебя зовут? 😻")
+            "🐾Мяу! Привет, я Бисквитик, твой добрый и ласковый помощник. Давай подружимся! Как тебя зовут? 😻",reply_markup=ReplyKeyboardRemove())
     await Form.name.set()
 
 # Сбор имени
 @dp.message_handler(state=Form.name)
-async def process_name(message: types.Message, state: FSMContext):
-    await state.update_data(name=message.text)
+async def process_name(message: types.Message):
     user_id = message.from_user.id
     update_data(user_id, 'name', message.text)
     await message.answer(
-            f"🐾Мурр, приятно познакомиться, {message.text}! Оставь, пожалуйста, свой адрес электронной почты, чтобы мы всегда могли быть на связи! 💌")
+            f"🐾Мурр, приятно познакомиться, {message.text}, я ценю каждого своего друга и не хочу потерять связь с тобой! Оставь, пожалуйста, свой адрес электронной почты, чтобы мы всегда могли быть на связи! 💌 Обещаю, что никому, кроме неё, я его не передам — мурр, вся информация остаётся между нами! 😺")
     await Form.email.set()
-
 
 # Сбор email
 @dp.message_handler(state=Form.email)
-async def process_email(message: types.Message, state: FSMContext):
-    await state.update_data(email=message.text)
+async def process_email(message: types.Message):
     user_id = message.from_user.id
     update_data(user_id, 'email', message.text)
     share_phone_button = KeyboardButton(text="📱 Поделиться номером", request_contact=True)
     keyboard = ReplyKeyboardMarkup(resize_keyboard=True).add(share_phone_button)
-    await message.answer("🐾Мяу, ещё мне нужен твой номер телефона, чтобы оставаться на связи! 📱", reply_markup=keyboard)
+    await message.answer("🐾Мяу, ещё мне нужно твой номер телефона. Это поможет оставаться рядом и не потеряться! 📱 Я обещаю не рассказывать твой номер никому и не кусать телефонные провода! 😸", reply_markup=keyboard)
     await Form.choice.set()
 
-@dp.message_handler(content_types=types.ContentType.CONTACT, state=Form.choice)
+@dp.message_handler(content_types=[types.ContentType.CONTACT, types.ContentType.TEXT], state=Form.choice)
 async def process_choice_contact(message: types.Message, state: FSMContext):
+    user_id = message.from_user.id
     if message.contact:
-        await state.update_data(phone=message.contact.phone_number)
-        user_id = message.from_user.id
         update_data(user_id, 'phone', message.contact.phone_number)
-        first_button = KeyboardButton(text="Практикум Чистый дом")
-        second_button = KeyboardButton(text="Полезные материалы")
-        third_button = KeyboardButton(text="Статьи")
-        keyboard = ReplyKeyboardMarkup(resize_keyboard=True).add(first_button, second_button, third_button)
-        await message.answer("🐾 Мяу-мяу, спасибо за номер, друг! Теперь мы точно не потеряемся! 😸 А чем тебе интереснее заняться прямо сейчас?", reply_markup=keyboard)
-        await Form.current_task.set()
+    else:
+        update_data(user_id, 'phone', message.text)
+    first_button = KeyboardButton(text="Практикум Чистый дом")
+    second_button = KeyboardButton(text="Полезные материалы")
+    third_button = KeyboardButton(text="Статьи")
+    keyboard = ReplyKeyboardMarkup(resize_keyboard=True).add(first_button, second_button, third_button)
+    await message.answer("🐾 Мяу-мяу, спасибо за номер, друг! Теперь мы точно не потеряемся! 😸 А чем тебе интереснее заняться прямо сейчас?\n1️⃣ Хочешь узнать больше о практикуме 'Чистый дом'? Я с удовольствием поделюсь подробностями, как навести уют и порядок вокруг! 🏡✨\n2️⃣ Может, тебе интересно посмотреть полезные материалы? У моей хозяйки есть видео на YouTube, которые помогут сделать дом ещё уютнее, и тебе точно понравятся! 🎥💙\n3️⃣ А ещё у нас есть статьи, где мы делимся секретами уюта и организации пространства. Они обязательно вдохновят тебя на перемены! 📖🌟\nВыбирай, что ближе, и я сразу начну мурлыкать свои секреты! 😻", reply_markup=keyboard)
+    await Form.current_task.set()
 
 @dp.message_handler(state=Form.current_task)
-async def process_current_task(message: types.Message, state: FSMContext):
-    await state.update_data(current_task=message.text)
-
+async def process_current_task(message: types.Message):
+    user_id = message.from_user.id
     if message.text == "Практикум Чистый дом":
-
-        await state.update_data(offer=message.text)
-        user_id = message.from_user.id
         update_data(user_id, 'interest', message.text)
         first_button = KeyboardButton(text="Да")
         second_button = KeyboardButton(text="Нет")
@@ -139,9 +130,6 @@ async def process_current_task(message: types.Message, state: FSMContext):
     else:
         pass
 
-
-
-# Сбор номера телефона
 @dp.message_handler(state=Form.phone)
 async def process_phone(message: types.Message, state: FSMContext):
     def create_payment():
@@ -169,14 +157,13 @@ async def process_phone(message: types.Message, state: FSMContext):
         else:
             return False
 
-<<<<<<< HEAD
     user_id = message.from_user.id
     url, id = create_payment()
     link_button = InlineKeyboardButton(text="📱 Ссылка на оплату", url=url)
     keyboard = InlineKeyboardMarkup().add(link_button)
     if message.text == "Да":
         await message.answer("🐾 Мурр, отлично, что тебя заинтересовало!",reply_markup=ReplyKeyboardRemove())
-        await message.answer("🐾 Стоимость — всего 2100 рублей, а доступ к практикуму 'Чистый дом' будет ровно на 30 дней. Ты сможешь пройти его даже за неделю, но валерия специально даёт целый месяц, чтобы ты мог подстроить программу под свой график. Уют и порядок ждут тебя, муррр, начинай прямо сейчас! 💙",
+        await message.answer("🐾 Стоимость — всего 2100 рублей, а доступ к практикуму 'Чистый дом' будет ровно на 30 дней. Ты сможешь пройти его даже за неделю, но Валерия специально даёт целый месяц, чтобы ты мог подстроить программу под свой график. Уют и порядок ждут тебя, муррр, начинай прямо сейчас! 💙",
         reply_markup=keyboard)
         count = 0
         while not check(id):
@@ -187,70 +174,50 @@ async def process_phone(message: types.Message, state: FSMContext):
         if check(id):
             await bot.send_message(message.chat.id, "🐾 Мяу-мяу! Отлично, оплата прошла. Переходи к тетушке Блеск!")
             update_data(user_id, 'status', 'OK')
-            await Form.blesk.set()
+            await message.answer("🐾Мяу, вижу, что ты оплатил, здорово! Теперь я передам тебя тете Блеск, она у нас главная по выдаче материалов чистоты. Она может быть своевольной, но на самом деле очень милая, она всегда подкармливает меня вкусняшками и гладит за ушком. Надеюсь и ты с ней подружишься! 😸 Вот ссылка для общения с ней: https://web.telegram.org/k/#@tetblesk_bot")
+            await state.finish()
         else:
             await bot.send_message(message.chat.id, "🐾 Мяу-мяу! Что-то не понравилось? Выбери причину:")
             update_data(user_id, 'status', 'Failed')
             # Подсказки для ответов
             feedback_keyboard = ReplyKeyboardMarkup(resize_keyboard=True)
-            feedback_keyboard.add("💸 Цена высока", "⏳ Боюсь, что не хватит времени", "🤔 Не уверен, что поможет",
+            feedback_keyboard.add("💸 Цена высока", "⏳ Нет времени", "🤔 Не поможет",
                                   "💭 Другой вопрос")
             await message.answer("Выбери причину, и я мурлыкну в ответ! 😸", reply_markup=feedback_keyboard)
             await Form.feedback.set()
-=======
-    await state.update_data(phone=message.contact.phone_number)
-    user_id = message.from_user.id
-    update_data(user_id, 'phone', message.contact.phone_number)
-    url, id = create_payment()
-    link_button = KeyboardButton(text="📱 Ссылка на оплату", url=url)
-    keyboard = ReplyKeyboardMarkup(resize_keyboard=True).add(link_button)
-    await message.answer(
-        "🐾Ох, ты знаешь, у хозяйки есть замечательный продукт, который точно тебе понравится! 🌟 Практикум 'Чистый дом' 🌟 — это твой ключ к уюту и порядку.",
-        reply_markup=keyboard)
-    count = 0
-    while not check(id):
-        count +=1
-        time.sleep(1)
-        if count == 600 or check(id):
-            break
-    if check(id):
-        await bot.send_message(message.chat.id, "🐾 Мяу-мяу! Отлично, оплата прошла. Переходи к тетушке Блеск!")
-        update_data(user_id, 'status', 'OK')
-        await Form.blesk.set()
->>>>>>> c9dad5b12775cf3bfd93c72b3a9a80324418019a
     else:
         await bot.send_message(message.chat.id, "🐾 Мяу-мяу! Что-то не понравилось? Выбери причину:")
         update_data(user_id, 'status', 'Failed')
         # Подсказки для ответов
         feedback_keyboard = ReplyKeyboardMarkup(resize_keyboard=True)
-        feedback_keyboard.add("💸 Цена высока", "⏳ Боюсь, что не хватит времени", "🤔 Не уверен, что поможет",
+        feedback_keyboard.add("💸 Цена высока", "⏳ Нет времени", "🤔 Не поможет",
                               "💭 Другой вопрос")
         await message.answer("Выбери причину, и я мурлыкну в ответ! 😸", reply_markup=feedback_keyboard)
         await Form.feedback.set()
-
-
 
 # Обработка причин отказа
 @dp.message_handler(state=Form.feedback)
 async def process_feedback(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
+    feedback_keyboard = ReplyKeyboardMarkup(resize_keyboard=True)
+    feedback_keyboard.add("Нет, спасибо", "Я подумаю")
     if message.text == "💸 Цена высока":
         update_data(user_id, 'cause', 'price')
         await message.answer(
-            "🐾Мур-мур, понимаю, 2000 рублей могут показаться значительной суммой, но это целый месяц доступа!")
+            "🐾Мур-мур, понимаю, 2100 рублей могут показаться значительной суммой. Но за эти деньги ты получаешь доступ к практикуму на целый месяц! 💙 Помимо основных уроков, там есть много дополнительных материалов, чек-листов и домашних заданий, которые помогут не потеряться в процессе. И между нами... там ещё есть кое-что особенное для тех, кто пройдет практикум, но об этом мне нельзя мяукать... 🐾 Представь, как изменится твой дом — уют и порядок того стоят! 🏡✨", reply_markup=feedback_keyboard)
         await Form.remind.set()
-    elif message.text == "⏳ Боюсь, что не хватит времени":
+    elif message.text == "⏳ Нет времени":
         update_data(user_id, 'cause', 'time')
         await message.answer(
-            "🐾Мур, боишься, что не успеешь? Практикум можно пройти за 3 дня, но доступ — целый месяц! 📅")
+            "🐾Мур, боишься, что не успеешь? Не переживай! Ты можешь пройти практикум за 3 дня, но у тебя будет доступ целый месяц. 📅 Подстраивай уроки под свой ритм — у нас много чек-листов и заданий, которые помогут тебе двигаться уверенно и спокойно. И не волнуйся, если вдруг понадобится больше времени — у нас всё рассчитано на то, чтобы ты смог успеть даже с самым плотным графиком. Мурр, важен каждый шаг к уюту! 🕰️", reply_markup=feedback_keyboard)
         await Form.remind.set()
-    elif message.text == "🤔 Не уверен, что поможет":
+    elif message.text == "🤔 Не поможет":
         update_data(user_id, 'cause', 'help')
-        await message.answer("🐾Мурр, ты будешь удивлён результатом! Расхламление и уборка сделают твой дом уютным! 🏡✨")
+        await message.answer("🐾Мурр, сомневаешься, поможет ли? Поверь, ты будешь удивлён результатом! Наши простые шаги по расхламлению, уборке и организации пространства создадут настоящий уют в твоём доме. 💙 Чек-листы, домашние задания и дополнительные материалы поддержат тебя на каждом этапе. А ещё... есть кое-что особенное, что я не могу рассказать прямо сейчас, но ты узнаешь об этом в процессе. 🏡✨ Рискни — и увидишь, как твой дом наполняется теплом и энергией!", reply_markup=feedback_keyboard)
         await Form.remind.set()
     elif message.text == "💭 Другой вопрос":
         update_data(user_id, 'cause', 'other')
-        await message.answer("🐾Мяу! Задай свой вопрос, и моя хозяйка Валерия скоро ответит!")
+        await message.answer("🐾Мяу! У тебя возник другой вопрос? Не волнуйся, я обязательно передам его своей хозяйке, Валерии Жилич, и она ответит тебе в ближайшее время. 💬 Просто подожди немного, а пока я буду мурлыкать и ждать вместе с тобой. 😸", reply_markup=feedback_keyboard)
         await Form.other_question.set()
 
 
@@ -266,11 +233,8 @@ async def process_other_question(message: types.Message, state: FSMContext):
 # Напоминание об оплате
 @dp.message_handler(state=Form.remind)
 async def remind_payment(message: types.Message, state: FSMContext):
-<<<<<<< HEAD
     user_id = message.from_user.id
-=======
->>>>>>> c9dad5b12775cf3bfd93c72b3a9a80324418019a
-    await bot.send_message(user_id, "🐾 Мяу, это снова Бисквитик! Практикум 'Чистый дом' всё ещё ждёт тебя! 🏡💙\n Если передумаешь, жми на /start и заполняй анкету заново!")
+    await bot.send_message(user_id, "🐾 Мяу, это снова Бисквитик! Практикум 'Чистый дом' всё ещё ждёт тебя! 🏡💙\n Если передумаешь, жми на /start и заполняй анкету заново!",reply_markup=ReplyKeyboardRemove())
     await state.finish()
 
 
