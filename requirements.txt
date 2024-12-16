@@ -1,3 +1,4 @@
 aiogram==2.14.3
 pandas
 yookassa
+moviepy
